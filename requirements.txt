@@ -1,1 +1,11 @@
+openai
 pandas
+chromadb
+streamlit
+python-dotenv
+matplotlib
+ragas==0.1.21
+datasets
+langchain-community
+langchain-openai
+tiktoken
