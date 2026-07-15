@@ -36,7 +36,64 @@ skill_freq, seniority_salary, jobs_df = load_csvs()
 # --------------------------------------------------
 # LOAD CHROMA
 # --------------------------------------------------
+def build_chroma_if_needed():
+    chroma_path = "data/chroma_db"
+    if os.path.exists(chroma_path):
+        return  # already built
 
+    st.info("⚙️ Building vector database for first time... (takes ~2 mins)")
+    
+    embedding_fn = OpenAIEmbeddingFunction(
+        api_key=os.getenv("OPENAI_API_KEY"),
+        model_name="text-embedding-3-small"
+    )
+    chroma_client = chromadb.PersistentClient(path=chroma_path)
+    
+    try:
+        chroma_client.delete_collection("job_postings")
+    except:
+        pass
+    
+    collection = chroma_client.create_collection(
+        name="job_postings",
+        embedding_function=embedding_fn
+    )
+    
+    df = pd.read_csv("data/extracted_jobs.csv")
+    df = df.dropna(subset=['title', 'company_name']).reset_index(drop=True)
+    
+    def build_chunk(row):
+        salary = f"${row['normalized_salary']:,.0f}" if pd.notna(row['normalized_salary']) else "Not specified"
+        return f"""Job Title: {row['title']}
+Company: {row['company_name']}
+Location: {row['location']}
+Seniority: {row['seniority']}
+Remote Policy: {row['remote']}
+Experience Required: {row['experience_years']}
+Salary: {salary}
+Skills: {row['skills']}""".strip()
+    
+    df['chunk'] = df.apply(build_chunk, axis=1)
+    
+    BATCH_SIZE = 50
+    for i in range(0, len(df), BATCH_SIZE):
+        batch = df.iloc[i:i+BATCH_SIZE]
+        collection.add(
+            ids=[str(idx) for idx in batch.index],
+            documents=batch['chunk'].tolist(),
+            metadatas=[{
+                'title': str(row['title']),
+                'company': str(row['company_name']),
+                'location': str(row['location']),
+                'seniority': str(row['seniority']),
+                'remote': str(row['remote']),
+                'salary': str(row['normalized_salary'])
+            } for _, row in batch.iterrows()]
+        )
+    st.success("✅ Vector database ready!")
+    st.rerun()
+
+build_chroma_if_needed()
 @st.cache_resource
 def load_chroma():
     embedding_fn = OpenAIEmbeddingFunction(
