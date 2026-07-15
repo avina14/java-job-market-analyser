@@ -33,21 +33,17 @@ def load_csvs():
 
 skill_freq, seniority_salary, jobs_df = load_csvs()
 
-# --------------------------------------------------
-# LOAD CHROMA
-# --------------------------------------------------
-def build_chroma_if_needed():
-    chroma_path = "data/chroma_db"
-    if os.path.exists(chroma_path):
-        return  # already built
 
-    st.info("⚙️ Building vector database for first time... (takes ~2 mins)")
-    
+@st.cache_resource
+def load_chroma():
     embedding_fn = OpenAIEmbeddingFunction(
         api_key=os.getenv("OPENAI_API_KEY"),
         model_name="text-embedding-3-small"
     )
-    chroma_client = chromadb.PersistentClient(path=chroma_path)
+    
+    # Use in-memory client — rebuilds on each session
+    # but doesn't rely on disk persistence
+    chroma_client = chromadb.EphemeralClient()
     
     try:
         chroma_client.delete_collection("job_postings")
@@ -75,9 +71,8 @@ Skills: {row['skills']}""".strip()
     
     df['chunk'] = df.apply(build_chunk, axis=1)
     
-    BATCH_SIZE = 50
-    for i in range(0, len(df), BATCH_SIZE):
-        batch = df.iloc[i:i+BATCH_SIZE]
+    for i in range(0, len(df), 50):
+        batch = df.iloc[i:i+50]
         collection.add(
             ids=[str(idx) for idx in batch.index],
             documents=batch['chunk'].tolist(),
@@ -90,30 +85,9 @@ Skills: {row['skills']}""".strip()
                 'salary': str(row['normalized_salary'])
             } for _, row in batch.iterrows()]
         )
-    st.success("✅ Vector database ready!")
-    st.rerun()
-
-build_chroma_if_needed()
-@st.cache_resource
-def load_chroma():
-    embedding_fn = OpenAIEmbeddingFunction(
-        api_key=os.getenv("OPENAI_API_KEY"),
-        model_name="text-embedding-3-small"
-    )
-
-    chroma_client = chromadb.PersistentClient(
-        path="data/chroma_db"
-    )
-
-    collection = chroma_client.get_collection(
-        name="job_postings",
-        embedding_function=embedding_fn
-    )
-
+    
     return collection
-
 collection = load_chroma()
-
 # --------------------------------------------------
 # CHAT MEMORY
 # --------------------------------------------------
