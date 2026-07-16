@@ -6,6 +6,15 @@ from chromadb.utils.embedding_functions import OpenAIEmbeddingFunction
 from openai import OpenAI
 from dotenv import load_dotenv
 
+
+BAD_WORDS = [
+    "fuck", "shit", "bitch", "asshole", "bastard",
+    "damn", "crap", "idiot", "stupid", "moron"
+]
+
+def contains_profanity(text):
+    text_lower = text.lower()
+    return any(word in text_lower for word in BAD_WORDS)
 # --------------------------------------------------
 # CONFIG
 # --------------------------------------------------
@@ -257,6 +266,10 @@ with tab3:
     )
 
     if user_input:
+        if contains_profanity(user_input):
+            with st.chat_message("assistant"):
+                st.markdown("🚫 Let's keep it professional! I'm here to help you with job market insights — ask me anything about salaries, skills, or companies.")
+            st.stop()
 
         st.session_state.messages.append(
             {
